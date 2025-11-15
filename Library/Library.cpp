@@ -7,6 +7,8 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+
 using namespace std;
 
 struct Book {
@@ -195,17 +197,81 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //
 //
 
+void SortLibrary(int mode)
+{
+    switch (mode)
+    {
+    case 0: // Title ascending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.title < b.title;
+            });
+        break;
+
+    case 1: // Title descending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.title > b.title;
+            });
+        break;
+
+    case 2: // Author ascending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.author < b.author;
+            });
+        break;
+
+    case 3: // Author descending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.author > b.author;
+            });
+        break;
+
+    case 4: // Year ascending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.year < b.year;
+            });
+        break;
+
+    case 5: // Year descending
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                return a.year > b.year;
+            });
+        break;
+
+    case 6: // Favorites first, then by title
+        sort(library.begin(), library.end(),
+            [](const Book& a, const Book& b) {
+                if (a.favorite != b.favorite)
+                    return a.favorite > b.favorite;
+                return a.title < b.title;
+            });
+        break;
+    }
+
+}
+
+
 void RefreshBookList(HWND hDlg) {
     HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
     SendMessage(hList, LB_RESETCONTENT, 0, 0);
 
-    for (const auto& book : library)
+    for (const auto& b : library)
     {
         wstring line;
-        if (book.favorite)
-            line = L"⭐ " + book.title + L" - " + book.author;
-        else
-            line = book.title + L" - " + book.author;
+
+        if (b.favorite)
+            line += L"⭐ ";
+
+        line += b.title + L" | "
+            + b.author + L" | "
+            + to_wstring(b.year) + L" | "
+            + b.genre + L" | "
+            + b.isbn;
 
         SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)line.c_str());
     }
@@ -342,9 +408,24 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     switch (message)
     {
     case WM_INITDIALOG:
+    {
+        HWND hSort = GetDlgItem(hDlg, IDC_SORT);
+
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Title (asc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Title (desc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Author (asc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Author (desc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Year (asc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Year (desc.)");
+        SendMessage(hSort, CB_ADDSTRING, 0, (LPARAM)L"Favourites First");
+
+        SendMessage(hSort, CB_SETCURSEL, 6, 0);
+
+        SortLibrary(6); 
+
         RefreshBookList(hDlg);
         return (INT_PTR)TRUE;
-
+    }
     case WM_COMMAND:
         int wmId = LOWORD(wParam);
         switch (wmId)
@@ -397,7 +478,21 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             RefreshBookList(hDlg);
             return (INT_PTR)TRUE;
         }
+        case IDC_SORT:
+        {
+            if (HIWORD(wParam) == CBN_SELCHANGE)
+            {
+                HWND hSort = GetDlgItem(hDlg, IDC_SORT);
+                int mode = (int)SendMessage(hSort, CB_GETCURSEL, 0, 0);
 
+                if (mode != CB_ERR && mode >= 0)
+                {
+                    SortLibrary(mode);
+                    RefreshBookList(hDlg);
+                }
+            }
+            return (INT_PTR)TRUE;
+        }
         case IDOK:
         case IDCANCEL:
             EndDialog(hDlg, LOWORD(wParam));

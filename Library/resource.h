@@ -41,6 +41,10 @@
 #define IDC_EDIT_GENRE                  1019
 #define IDC_EDIT_ISBN                   1020
 #define IDC_TOTALBOOKS                  1021
+#define IDC_LIST2                       1022
+#define IDC_BUTTON_SORT                 1023
+#define IDC_BUTTON9                     1024
+#define IDC_BUTTON_FILTER               1024
 #define ID_FILE_IMPORTFROMCSV           32771
 #define ID_FILE_EXPORTTOCSV             32772
 #define ID_EDIT                         32773
@@ -65,7 +69,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        135
 #define _APS_NEXT_COMMAND_VALUE         32786
-#define _APS_NEXT_CONTROL_VALUE         1022
+#define _APS_NEXT_CONTROL_VALUE         1025
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif
