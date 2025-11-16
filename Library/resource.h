@@ -45,6 +45,7 @@
 #define IDC_BUTTON_SORT                 1023
 #define IDC_BUTTON9                     1024
 #define IDC_BUTTON_FILTER               1024
+#define IDC_COMBO1                      1025
 #define ID_FILE_IMPORTFROMCSV           32771
 #define ID_FILE_EXPORTTOCSV             32772
 #define ID_EDIT                         32773
@@ -69,7 +70,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        135
 #define _APS_NEXT_COMMAND_VALUE         32786
-#define _APS_NEXT_CONTROL_VALUE         1025
+#define _APS_NEXT_CONTROL_VALUE         1026
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

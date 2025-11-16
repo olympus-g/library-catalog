@@ -28,6 +28,18 @@ vector<Book> library;
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+const vector<wstring> GENRES = {
+    L"Fantasy",
+    L"Romance",
+    L"Science Fiction",
+    L"Literary Fiction",
+    L"Horror",
+    L"Nonfiction",
+    L"Historical",
+    L"Mystery",
+    L"Thriller",
+    L"Biography"
+};
 
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -186,16 +198,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
-//
-//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
-//
-//  PURPOSE: Processes messages for the main window.
-//
-//  WM_COMMAND  - process the application menu
-//  WM_PAINT    - Paint the main window
-//  WM_DESTROY  - post a quit message and return
-//
-//
+
 
 void SortLibrary(int mode)
 {
@@ -255,37 +258,57 @@ void SortLibrary(int mode)
 
 }
 
+int GetRealIndexFromListBox(HWND hList, int selection)
+{
+    if (selection == LB_ERR) return -1;
+    return (int)SendMessage(hList, LB_GETITEMDATA, selection, 0);
+}
 
 void RefreshBookList(HWND hDlg) {
     HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
     SendMessage(hList, LB_RESETCONTENT, 0, 0);
 
-    for (const auto& b : library)
+    for (size_t i = 0; i < library.size(); i++)
     {
-        wstring line;
+        const Book& b = library[i];
+        wstring line = (b.favorite ? L"⭐ " : L"") +
+            b.title + L" | " + b.author + L" | " +
+            to_wstring(b.year) + L" | " + b.genre + L" | " + b.isbn;
 
-        if (b.favorite)
-            line += L"⭐ ";
-
-        line += b.title + L" | "
-            + b.author + L" | "
-            + to_wstring(b.year) + L" | "
-            + b.genre + L" | "
-            + b.isbn;
-
-        SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+        int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+        SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)i);
     }
 
-    wstring count = L"Total books: " + to_wstring(library.size());
-    SetDlgItemText(hDlg, IDC_TOTALBOOKS, count.c_str());
+    SetDlgItemText(hDlg, IDC_TOTALBOOKS,
+        (L"Total books: " + to_wstring(library.size())).c_str());
+}
+
+void PopulateGenreCombo(HWND combo)
+{
+    SendMessage(combo, CB_RESETCONTENT, 0, 0);
+    for (const auto& g : GENRES)
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)g.c_str());
 }
 
 
-INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    switch (message) {
+INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        PopulateGenreCombo(GetDlgItem(hDlg, IDC_GENRE));
+        SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_SETCURSEL, 0, 0);
+        return (INT_PTR)TRUE;
+
     case WM_COMMAND:
-        switch (LOWORD(wParam)) {
-        case IDOK: {
+        if (LOWORD(wParam) == IDCANCEL)
+        {
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+
+        if (LOWORD(wParam) == IDOK)
+        {
             Book newBook;
             wchar_t buffer[256];
 
@@ -295,34 +318,33 @@ INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPara
             GetDlgItemText(hDlg, IDC_EDIT_AUTHOR, buffer, 256);
             newBook.author = buffer;
 
-            GetDlgItemText(hDlg, IDC_EDIT_GENRE, buffer, 256);
-            newBook.genre = buffer;
+            int genreSel = (int)SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_GETCURSEL, 0, 0);
+            if (genreSel >= 0) newBook.genre = GENRES[genreSel];
 
             GetDlgItemText(hDlg, IDC_EDIT_ISBN, buffer, 256);
             newBook.isbn = buffer;
 
-            BOOL success = FALSE;
-            int year = GetDlgItemInt(hDlg, IDC_EDIT_YEAR, &success, FALSE);
-            newBook.year = success ? year : 0;
+            BOOL success;
+            newBook.year = GetDlgItemInt(hDlg, IDC_EDIT_YEAR, &success, FALSE);
 
-            for (const auto& b : library) {
-                if (b.isbn == newBook.isbn) {
+            for (const auto& b : library)
+            {
+                if (b.isbn == newBook.isbn)
+                {
                     MessageBox(hDlg, L"Book with this ISBN already exists.", L"Duplicate ISBN", MB_ICONERROR);
                     return (INT_PTR)TRUE;
                 }
             }
+
             library.push_back(newBook);
             EndDialog(hDlg, IDOK);
-            return (INT_PTR)TRUE;
-        }
-        case IDCANCEL:
-            EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
         break;
     }
     return (INT_PTR)FALSE;
 }
+
 
 INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -332,13 +354,14 @@ INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
     {
     case WM_INITDIALOG:
     {
-        HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_TITLE);
-
+        HWND hComboTitle = GetDlgItem(hDlg, IDC_COMBO_TITLE);
         for (size_t i = 0; i < library.size(); i++)
         {
-            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)library[i].title.c_str());
+            int idx = (int)SendMessage(hComboTitle, CB_ADDSTRING, 0, (LPARAM)library[i].title.c_str());
+            SendMessage(hComboTitle, CB_SETITEMDATA, idx, (LPARAM)i);
         }
 
+        PopulateGenreCombo(GetDlgItem(hDlg, IDC_GENRE));
         selectedIndex = -1;
         return (INT_PTR)TRUE;
     }
@@ -350,23 +373,30 @@ INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
             if (HIWORD(wParam) == CBN_SELCHANGE)
             {
                 HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_TITLE);
-                selectedIndex = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                int comboIndex = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                selectedIndex = (int)SendMessage(hCombo, CB_GETITEMDATA, comboIndex, 0);
 
-                if (selectedIndex >= 0)
+                if (selectedIndex >= 0 && selectedIndex < (int)library.size())
                 {
                     const Book& b = library[selectedIndex];
 
                     SetDlgItemText(hDlg, IDC_EDIT_TITLE, b.title.c_str());
                     SetDlgItemText(hDlg, IDC_EDIT_AUTHOR, b.author.c_str());
                     SetDlgItemInt(hDlg, IDC_EDIT_YEAR, b.year, FALSE);
-                    SetDlgItemText(hDlg, IDC_EDIT_GENRE, b.genre.c_str());
                     SetDlgItemText(hDlg, IDC_EDIT_ISBN, b.isbn.c_str());
+
+                    auto it = find(GENRES.begin(), GENRES.end(), b.genre);
+                    if (it != GENRES.end())
+                    {
+                        int genreIdx = (int)distance(GENRES.begin(), it);
+                        SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_SETCURSEL, genreIdx, 0);
+                    }
                 }
             }
             return (INT_PTR)TRUE;
 
         case IDOK:
-            if (selectedIndex >= 0)
+            if (selectedIndex >= 0 && selectedIndex < (int)library.size())
             {
                 Book& b = library[selectedIndex];
                 wchar_t buffer[256];
@@ -377,17 +407,15 @@ INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 GetDlgItemText(hDlg, IDC_EDIT_AUTHOR, buffer, 256);
                 b.author = buffer;
 
-                BOOL success = FALSE;
-                int year = GetDlgItemInt(hDlg, IDC_EDIT_YEAR, &success, FALSE);
-                b.year = success ? year : 0;
+                BOOL success;
+                b.year = GetDlgItemInt(hDlg, IDC_EDIT_YEAR, &success, FALSE);
 
-                GetDlgItemText(hDlg, IDC_EDIT_GENRE, buffer, 256);
-                b.genre = buffer;
+                int genreSel = (int)SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_GETCURSEL, 0, 0);
+                if (genreSel >= 0) b.genre = GENRES[genreSel];
 
                 GetDlgItemText(hDlg, IDC_EDIT_ISBN, buffer, 256);
                 b.isbn = buffer;
             }
-
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;
 
@@ -397,7 +425,6 @@ INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
         }
         break;
     }
-
     return (INT_PTR)FALSE;
 }
 
@@ -447,34 +474,37 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         {
             HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
             int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+            int realIndex = GetRealIndexFromListBox(hList, sel);
 
-            if (sel == LB_ERR)
+            if (realIndex < 0)
             {
                 MessageBox(hDlg, L"Please select a book to delete.", L"No selection", MB_ICONWARNING);
                 return (INT_PTR)TRUE;
             }
 
-            if (MessageBox(hDlg, L"Are you sure you want to delete this book?", L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES)
+            if (MessageBox(hDlg, L"Are you sure you want to delete this book?",
+                L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
-                library.erase(library.begin() + sel);
+                library.erase(library.begin() + realIndex);
                 RefreshBookList(hDlg);
             }
-
             return (INT_PTR)TRUE;
         }
+
         case IDC_BTN_FAV:
         {
             HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
             int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+            int realIndex = GetRealIndexFromListBox(hList, sel);
 
-            if (sel == LB_ERR)
+            if (realIndex < 0)
             {
                 MessageBox(hDlg, L"Please select a book to favorite.", L"No Selection", MB_ICONWARNING);
                 return (INT_PTR)TRUE;
             }
 
-            library[sel].favorite = !library[sel].favorite;
-
+            library[realIndex].favorite = !library[realIndex].favorite;
+            SortLibrary(6);
             RefreshBookList(hDlg);
             return (INT_PTR)TRUE;
         }
@@ -502,6 +532,17 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     }
     return (INT_PTR)FALSE;
 }
+
+//
+//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
+//
+//  PURPOSE: Processes messages for the main window.
+//
+//  WM_COMMAND  - process the application menu
+//  WM_PAINT    - Paint the main window
+//  WM_DESTROY  - post a quit message and return
+//
+//
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
