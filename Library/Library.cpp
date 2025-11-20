@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <commdlg.h>
 
 using namespace std;
 
@@ -28,6 +29,7 @@ vector<Book> library;
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
+wstring currentGenreFilter = L"";
 const vector<wstring> GENRES = {
     L"Fantasy",
     L"Romance",
@@ -48,13 +50,13 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK    EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
-void                RefreshBookList(HWND hDlg);
+void                RefreshBookList(HWND hDlg, const wstring& genreFilter = L"");
 INT_PTR CALLBACK    AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 
 void SaveLibraryToFile()
 {
-    std::wofstream file(L"library.txt");
+    wofstream file(L"library.txt");
     if (!file.is_open()) return;
 
     for (const auto& b : library)
@@ -69,37 +71,45 @@ void SaveLibraryToFile()
     }
 }
 
-void LoadLibraryFromFile()
+bool LoadLibraryFromFile(const wstring& filename)
 {
-    std::wifstream file(L"library.txt");
-    if (!file.is_open()) return;
+    wifstream file(filename);
+    if (!file.is_open())
+        return false;
 
     library.clear();
-    std::wstring line;
+    wstring line;
 
-    while (std::getline(file, line))
+    while (getline(file, line))
     {
-        std::wstringstream ss(line);
+        wstringstream ss(line);
         Book b;
-        std::wstring fav;
+        wstring fav;
 
-        std::getline(ss, b.title, L'|');
-        std::getline(ss, b.author, L'|');
+        getline(ss, b.title, L'|');
+        getline(ss, b.author, L'|');
 
-        std::wstring yearStr;
-        std::getline(ss, yearStr, L'|');
+        wstring yearStr;
+        getline(ss, yearStr, L'|');
         b.year = _wtoi(yearStr.c_str());
 
-        std::getline(ss, b.genre, L'|');
-        std::getline(ss, b.isbn, L'|');
-        std::getline(ss, fav, L'|');
+        getline(ss, b.genre, L'|');
+        getline(ss, b.isbn, L'|');
+        getline(ss, fav, L'|');
 
         b.favorite = (fav == L"1");
 
         library.push_back(b);
     }
+
+    return true;
 }
 
+void LoadLibraryFromDefault()
+{
+    library.clear();
+    LoadLibraryFromFile(L"library.txt");
+}
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -116,7 +126,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     LoadStringW(hInstance, IDC_LIBRARY, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
-    LoadLibraryFromFile();
+    LoadLibraryFromDefault();
 
 
     // Perform application initialization:
@@ -198,7 +208,40 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+bool ImportLibraryFromFile(HWND hDlg)
+{
+    OPENFILENAME ofn;
+    wchar_t fileName[MAX_PATH] = L"";
+    ZeroMemory(&ofn, sizeof(ofn));
 
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hDlg;
+    ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = fileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+    if (!GetOpenFileName(&ofn))
+        return false;
+
+    int oldSize = library.size();
+
+    if (!LoadLibraryFromFile(fileName))
+    {
+        MessageBox(hDlg, L"Could not load the selected file.", L"Error", MB_ICONERROR);
+        return false;
+    }
+
+    int imported = library.size() - oldSize;
+
+    MessageBox(
+        hDlg,
+        (L"Imported " + to_wstring(imported) + L" books.").c_str(),
+        L"Import Complete",
+        MB_OK);
+
+    return true;
+}
 
 void SortLibrary(int mode)
 {
@@ -264,13 +307,23 @@ int GetRealIndexFromListBox(HWND hList, int selection)
     return (int)SendMessage(hList, LB_GETITEMDATA, selection, 0);
 }
 
-void RefreshBookList(HWND hDlg) {
+void RefreshBookList(HWND hDlg, const wstring& genreFilter) {
     HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
     SendMessage(hList, LB_RESETCONTENT, 0, 0);
+
+    int displayedCount = 0;
 
     for (size_t i = 0; i < library.size(); i++)
     {
         const Book& b = library[i];
+
+        bool filtering = (!genreFilter.empty() && genreFilter != L"All Genres");
+
+        if (filtering && b.genre != genreFilter)
+            continue;
+
+        displayedCount++;
+
         wstring line = (b.favorite ? L"⭐ " : L"") +
             b.title + L" | " + b.author + L" | " +
             to_wstring(b.year) + L" | " + b.genre + L" | " + b.isbn;
@@ -279,8 +332,8 @@ void RefreshBookList(HWND hDlg) {
         SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)i);
     }
 
-    SetDlgItemText(hDlg, IDC_TOTALBOOKS,
-        (L"Total books: " + to_wstring(library.size())).c_str());
+    wstring countText = L"Showing: " + to_wstring(displayedCount) + L" / " + to_wstring(library.size());
+    SetDlgItemText(hDlg, IDC_TOTALBOOKS, countText.c_str());
 }
 
 void PopulateGenreCombo(HWND combo)
@@ -448,9 +501,14 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
         SendMessage(hSort, CB_SETCURSEL, 6, 0);
 
-        SortLibrary(6); 
+        HWND hGenre = GetDlgItem(hDlg, IDC_GENRE);
+        PopulateGenreCombo(hGenre);
+        SendMessage(hGenre, CB_INSERTSTRING, 0, (LPARAM)L"All Genres");
+        SendMessage(hGenre, CB_SETCURSEL, 0, 0);
+        currentGenreFilter = L"All Genres";
 
-        RefreshBookList(hDlg);
+        SortLibrary(6);
+        RefreshBookList(hDlg, currentGenreFilter);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
@@ -460,14 +518,14 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         case IDC_BTN_ADD:
             if (DialogBox(hInst, MAKEINTRESOURCE(IDD_ADD_DIALOG), hDlg, AddBookDlg) == IDOK)
             {
-                RefreshBookList(hDlg);
+                RefreshBookList(hDlg, currentGenreFilter);
             }
             return (INT_PTR)TRUE;
 
         case IDC_BTN_EDIT:
             if (DialogBox(hInst, MAKEINTRESOURCE(IDD_EDIT_DIALOG), hDlg, EditBookDlg) == IDOK)
             {
-                RefreshBookList(hDlg);
+                RefreshBookList(hDlg, currentGenreFilter);
             }
             return (INT_PTR)TRUE;
         case IDC_BTN_DELETE:
@@ -486,7 +544,7 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
                 library.erase(library.begin() + realIndex);
-                RefreshBookList(hDlg);
+                RefreshBookList(hDlg, currentGenreFilter);
             }
             return (INT_PTR)TRUE;
         }
@@ -505,7 +563,7 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             library[realIndex].favorite = !library[realIndex].favorite;
             SortLibrary(6);
-            RefreshBookList(hDlg);
+            RefreshBookList(hDlg, currentGenreFilter);
             return (INT_PTR)TRUE;
         }
         case IDC_SORT:
@@ -518,8 +576,38 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 if (mode != CB_ERR && mode >= 0)
                 {
                     SortLibrary(mode);
-                    RefreshBookList(hDlg);
+                    RefreshBookList(hDlg, currentGenreFilter);
                 }
+            }
+            return (INT_PTR)TRUE;
+        }
+        case IDC_GENRE:
+        {
+            if (HIWORD(wParam) == CBN_SELCHANGE)
+            {
+                HWND hGenre = GetDlgItem(hDlg, IDC_GENRE);
+                int sel = (int)SendMessage(hGenre, CB_GETCURSEL, 0, 0);
+
+                if (sel != CB_ERR)
+                {
+                    wchar_t buffer[256];
+                    SendMessage(hGenre, CB_GETLBTEXT, sel, (LPARAM)buffer);
+
+                    currentGenreFilter = buffer;
+                    RefreshBookList(hDlg, currentGenreFilter);
+                }
+            }
+            return (INT_PTR)TRUE;
+        }
+        case IDC_BTN_IMPORT:
+        {
+            if (ImportLibraryFromFile(hDlg))
+            {
+                HWND hSort = GetDlgItem(hDlg, IDC_SORT);
+                int sortMode = (int)SendMessage(hSort, CB_GETCURSEL, 0, 0);
+
+                SortLibrary(sortMode);
+                RefreshBookList(hDlg, currentGenreFilter);
             }
             return (INT_PTR)TRUE;
         }

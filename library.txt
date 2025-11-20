@@ -1,0 +1,20 @@
+Dune|Frank Herbert|1965|Science Fiction|9780441013593|1
+Gone Girl|Gillian Flynn|2012|Mystery|9780307588371|1
+It|Stephen King|1986|Horror|9781501142970|1
+Pride and Prejudice|Jane Austen|1813|Romance|9781503290563|1
+Sapiens|Yuval Noah Harari|2011|Nonfiction|9780062316097|1
+The Book Thief|Markus Zusak|2005|Historical|9780375842207|1
+The Da Vinci Code|Dan Brown|2003|Thriller|9780307474278|1
+The Lord of the Rings|J.R.R. Tolkien|1954|Fantasy|9780544003415|1
+1984|George Orwell|1949|Literary Fiction|9780451524935|0
+All the Light We Cannot See|Anthony Doerr|2014|Historical|9781476746586|0
+Becoming|Michelle Obama|2018|Biography|9781524763138|0
+Dracula|Bram Stoker|1897|Horror|9780486411095|0
+Educated|Tara Westover|2018|Nonfiction|9780399590504|0
+Mistborn|Brandon Sanderson|2006|Fantasy|9780765311788|0
+Neuromancer|William Gibson|1984|Science Fiction|9780441569595|0
+The Fault in Our Stars|John Green|2012|Romance|9780525478812|0
+The Final Empire|Brandon Sanderson|2006|Fantasy|9780765311789|0
+The Girl with the Dragon Tattoo|Stieg Larsson|2005|Mystery|9780307454546|0
+The Great Gatsby|F. Scott Fitzgerald|1925|Literary Fiction|9780743273565|0
+The Hobbit|J.R.R. Tolkien|1937|Fantasy|9780547928227|0
