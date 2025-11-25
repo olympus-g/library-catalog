@@ -224,24 +224,111 @@ bool ImportLibraryFromFile(HWND hDlg)
     if (!GetOpenFileName(&ofn))
         return false;
 
-    int oldSize = library.size();
-
-    if (!LoadLibraryFromFile(fileName))
+    wifstream file(fileName);
+    if (!file.is_open())
     {
         MessageBox(hDlg, L"Could not load the selected file.", L"Error", MB_ICONERROR);
         return false;
     }
 
-    int imported = library.size() - oldSize;
+    int oldSize = (int)library.size();
+    wstring line;
+    int importedCount = 0;
+
+    while (getline(file, line))
+    {
+        wstringstream ss(line);
+        Book b;
+        wstring fav;
+
+        getline(ss, b.title, L'|');
+        getline(ss, b.author, L'|');
+
+        wstring yearStr;
+        getline(ss, yearStr, L'|');
+        b.year = _wtoi(yearStr.c_str());
+
+        getline(ss, b.genre, L'|');
+        getline(ss, b.isbn, L'|');
+        getline(ss, fav, L'|');
+
+        b.favorite = (fav == L"1");
+
+        bool isDuplicate = false;
+        for (const auto& existing : library)
+        {
+            if (existing.isbn == b.isbn)
+            {
+                isDuplicate = true;
+                break;
+            }
+        }
+
+        if (!isDuplicate)
+        {
+            library.push_back(b);
+            importedCount++;
+        }
+    }
+
+    file.close();
 
     MessageBox(
         hDlg,
-        (L"Imported " + to_wstring(imported) + L" books.").c_str(),
+        (L"Imported " + to_wstring(importedCount) + L" new books.\n" +
+            to_wstring(library.size() - oldSize - importedCount) + L" duplicates skipped.").c_str(),
         L"Import Complete",
-        MB_OK);
+        MB_OK | MB_ICONINFORMATION);
 
     return true;
 }
+
+bool ExportLibraryToFile(HWND hDlg)
+{
+    OPENFILENAME ofn;
+    wchar_t fileName[MAX_PATH] = L"library_export.txt";
+    ZeroMemory(&ofn, sizeof(ofn));
+
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hDlg;
+    ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = fileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    ofn.lpstrDefExt = L"txt";
+
+    if (!GetSaveFileName(&ofn))
+        return false;
+
+    wofstream file(fileName);
+    if (!file.is_open())
+    {
+        MessageBox(hDlg, L"Could not create the export file.", L"Error", MB_ICONERROR);
+        return false;
+    }
+
+    for (const auto& b : library)
+    {
+        file
+            << b.title << L"|"
+            << b.author << L"|"
+            << b.year << L"|"
+            << b.genre << L"|"
+            << b.isbn << L"|"
+            << (b.favorite ? 1 : 0) << L"\n";
+    }
+
+    file.close();
+
+    MessageBox(
+        hDlg,
+        (L"Exported " + to_wstring(library.size()) + L" books to:\n" + fileName).c_str(),
+        L"Export Complete",
+        MB_OK | MB_ICONINFORMATION);
+
+    return true;
+}
+
 
 void SortLibrary(int mode)
 {
@@ -611,6 +698,13 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             }
             return (INT_PTR)TRUE;
         }
+
+        case IDC_BTN_EXPORT:
+        {
+            ExportLibraryToFile(hDlg);
+            return (INT_PTR)TRUE;
+        }
+
         case IDOK:
         case IDCANCEL:
             EndDialog(hDlg, LOWORD(wParam));

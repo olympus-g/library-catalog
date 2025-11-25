@@ -34,6 +34,7 @@
 #define IDC_BUTTON5                     1007
 #define IDC_BTN_IMPORT                  1007
 #define IDC_BUTTON6                     1008
+#define IDC_BTN_EXPORT                  1008
 #define IDC_BUTTON7                     1009
 #define IDC_EDIT_TITLE                  1011
 #define IDC_COMBO_TITLE                 1016
