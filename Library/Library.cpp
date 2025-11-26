@@ -9,6 +9,7 @@
 #include <sstream>
 #include <algorithm>
 #include <commdlg.h>
+#include <map>
 
 using namespace std;
 
@@ -52,6 +53,7 @@ INT_PTR CALLBACK    LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARA
 INT_PTR CALLBACK    EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 void                RefreshBookList(HWND hDlg, const wstring& genreFilter = L"");
 INT_PTR CALLBACK    AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK    StatsDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 
 void SaveLibraryToFile()
@@ -431,6 +433,173 @@ void PopulateGenreCombo(HWND combo)
 }
 
 
+void DrawBarChart(HDC hdc, RECT rect, const vector<pair<wstring, int>>& data, const wstring& title)
+{
+    if (data.empty()) return;
+
+    HBRUSH blueBrush = CreateSolidBrush(RGB(70, 130, 180));
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, blueBrush);
+    HPEN blackPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
+    HPEN oldPen = (HPEN)SelectObject(hdc, blackPen);
+
+    SetTextAlign(hdc, TA_CENTER);
+    SetBkMode(hdc, TRANSPARENT);
+    HFONT hFont = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
+    HFONT oldFont = (HFONT)SelectObject(hdc, hFont);
+
+    TextOut(hdc, rect.left + (rect.right - rect.left) / 2, rect.top + 10, title.c_str(), (int)title.length());
+
+    int chartTop = rect.top + 50;
+    int chartBottom = rect.bottom - 80;
+    int chartLeft = rect.left + 60;
+    int chartRight = rect.right - 20;
+    int chartHeight = chartBottom - chartTop;
+    int chartWidth = chartRight - chartLeft;
+
+    int maxValue = 0;
+    for (const auto& item : data)
+        if (item.second > maxValue) maxValue = item.second;
+
+    if (maxValue == 0) maxValue = 1;
+
+    MoveToEx(hdc, chartLeft, chartTop, NULL);
+    LineTo(hdc, chartLeft, chartBottom);
+    LineTo(hdc, chartRight, chartBottom);
+
+    int barCount = (int)data.size();
+    int barSpacing = 10;
+    int totalSpacing = barSpacing * (barCount + 1);
+    int barWidth = (chartWidth - totalSpacing) / barCount;
+    if (barWidth < 5) barWidth = 5;
+
+    SelectObject(hdc, CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial"));
+
+    for (size_t i = 0; i < data.size(); i++)
+    {
+        int x = chartLeft + barSpacing + (int)i * (barWidth + barSpacing);
+        int barHeight = (int)((double)data[i].second / maxValue * chartHeight);
+        int y = chartBottom - barHeight;
+
+        Rectangle(hdc, x, y, x + barWidth, chartBottom);
+
+        wstring valueStr = to_wstring(data[i].second);
+        SetTextAlign(hdc, TA_CENTER);
+        TextOut(hdc, x + barWidth / 2, y - 20, valueStr.c_str(), (int)valueStr.length());
+
+        SetTextAlign(hdc, TA_LEFT);
+        int labelX = x + barWidth / 2;
+        int labelY = chartBottom + 10;
+
+        HFONT labelFont = CreateFont(12, 0, 900, 900, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
+        SelectObject(hdc, labelFont);
+
+        TextOut(hdc, labelX, labelY, data[i].first.c_str(), (int)data[i].first.length());
+
+        DeleteObject(labelFont);
+    }
+
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldFont);
+    DeleteObject(blueBrush);
+    DeleteObject(blackPen);
+    DeleteObject(hFont);
+}
+
+INT_PTR CALLBACK StatsDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    static bool showByGenre = true;
+
+    switch (message)
+    {
+    case WM_INITDIALOG:
+    {
+        CheckRadioButton(hDlg, IDC_RADIO_GENRE, IDC_RADIO_YEAR, IDC_RADIO_GENRE);
+        showByGenre = true;
+        return (INT_PTR)TRUE;
+    }
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDC_RADIO_GENRE:
+            showByGenre = true;
+            InvalidateRect(hDlg, NULL, TRUE);
+            return (INT_PTR)TRUE;
+
+        case IDC_RADIO_YEAR:
+            showByGenre = false;
+            InvalidateRect(hDlg, NULL, TRUE);
+            return (INT_PTR)TRUE;
+
+        case IDOK:
+        case IDCANCEL:
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hDlg, &ps);
+
+        RECT clientRect;
+        GetClientRect(hDlg, &clientRect);
+
+        RECT chartRect = clientRect;
+        chartRect.bottom -= 60;
+
+        if (showByGenre)
+        {
+            map<wstring, int> genreCount;
+            for (const auto& b : library)
+            {
+                if (!b.genre.empty())
+                    genreCount[b.genre]++;
+            }
+
+            vector<pair<wstring, int>> data(genreCount.begin(), genreCount.end());
+
+            sort(data.begin(), data.end(),
+                [](const pair<wstring, int>& a, const pair<wstring, int>& b) {
+                    return a.second > b.second;
+                });
+
+            DrawBarChart(hdc, chartRect, data, L"Books by Genre");
+        }
+        else
+        {
+            map<int, int> yearCount;
+            for (const auto& b : library)
+            {
+                if (b.year > 0)
+                    yearCount[b.year]++;
+            }
+
+            vector<pair<wstring, int>> data;
+            for (const auto& item : yearCount)
+                data.push_back(make_pair(to_wstring(item.first), item.second));
+
+            sort(data.begin(), data.end(),
+                [](const pair<wstring, int>& a, const pair<wstring, int>& b) {
+                    return _wtoi(a.first.c_str()) < _wtoi(b.first.c_str());
+                });
+
+            DrawBarChart(hdc, chartRect, data, L"Books by Year");
+        }
+
+        EndPaint(hDlg, &ps);
+        return (INT_PTR)TRUE;
+    }
+    }
+
+    return (INT_PTR)FALSE;
+}
+
 INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -705,6 +874,11 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             return (INT_PTR)TRUE;
         }
 
+        case IDC_BTN_STATS:
+        {
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_STATS_DIALOG), hDlg, StatsDlg);
+            return (INT_PTR)TRUE;
+        }
         case IDOK:
         case IDCANCEL:
             EndDialog(hDlg, LOWORD(wParam));
