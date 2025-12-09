@@ -13,6 +13,11 @@
 
 using namespace std;
 
+//
+// STRUCT: Book
+// PURPOSE: Defines the data model for a single book entry.
+// NOTE: Uses wstring to support Unicode characters
+//
 struct Book {
     wstring title;
     wstring author;
@@ -22,16 +27,15 @@ struct Book {
     bool favorite = false;
 };
 
-vector<Book> library;
-
 #define MAX_LOADSTRING 100
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
-wstring currentGenreFilter = L"";
-const vector<wstring> GENRES = {
+wstring currentGenreFilter = L"";               // Tracks the current state of the list view
+vector<Book> library;                           // Global vector to store the book catalog
+const vector<wstring> GENRES = {                // Predefined list of genres
     L"Fantasy",
     L"Romance",
     L"Science Fiction",
@@ -49,13 +53,37 @@ ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+
+// Dialog Procedures
 INT_PTR CALLBACK    LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK    EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
-void                RefreshBookList(HWND hDlg, const wstring& genreFilter = L"");
 INT_PTR CALLBACK    AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK    EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK    StatsDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
+// File Operations
+void                SaveLibraryToFile();
+bool                LoadLibraryFromFile(const wstring& filename);
+void                LoadLibraryFromDefault();
+bool                ImportLibraryFromFile(HWND hDlg);
+bool                ExportLibraryToFile(HWND hDlg);
 
+// Data Management & Helpers
+void                SortLibrary(int mode);
+int                 GetRealIndexFromListBox(HWND hList, int selection);
+void                RefreshBookList(HWND hDlg, const wstring& genreFilter = L"");
+void                PopulateGenreCombo(HWND combo);
+
+// Graphics
+void                DrawBarChart(HDC hdc, RECT rect, const vector<pair<wstring, int>>& data, const wstring& title);
+
+//
+//  FUNCTION: SaveLibraryToFile()
+//
+//  PURPOSE: Saves the current library vector to the default storage file (library.txt).
+//
+//  COMMENTS:
+//      Uses pipe (|) as a delimiter. Saves favorite status as 0 or 1.
+//
 void SaveLibraryToFile()
 {
     wofstream file(L"library.txt");
@@ -73,6 +101,14 @@ void SaveLibraryToFile()
     }
 }
 
+//
+//  FUNCTION: LoadLibraryFromFile(const wstring&)
+//
+//  PURPOSE: Loads book data from a specified file path into the library vector.
+//
+//  COMMENTS:
+//      Clears the existing library before loading.
+//
 bool LoadLibraryFromFile(const wstring& filename)
 {
     wifstream file(filename);
@@ -107,6 +143,11 @@ bool LoadLibraryFromFile(const wstring& filename)
     return true;
 }
 
+//
+//  FUNCTION: LoadLibraryFromDefault()
+//
+//  PURPOSE: Helper function to load the default "library.txt" file on startup.
+//
 void LoadLibraryFromDefault()
 {
     library.clear();
@@ -153,8 +194,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     return (int) msg.wParam;
 }
-
-
 
 //
 //  FUNCTION: MyRegisterClass()
@@ -210,6 +249,15 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+//
+//  FUNCTION: ImportLibraryFromFile(HWND)
+//
+//  PURPOSE: Opens a file dialog to import books from a user-selected text file.
+//
+//  COMMENTS:
+//      Checks for duplicate ISBNs to prevent double entries. 
+//      Displays a message box with results.
+//
 bool ImportLibraryFromFile(HWND hDlg)
 {
     OPENFILENAME ofn;
@@ -285,6 +333,11 @@ bool ImportLibraryFromFile(HWND hDlg)
     return true;
 }
 
+//
+//  FUNCTION: ExportLibraryToFile(HWND)
+//
+//  PURPOSE: Opens a save file dialog to export the current catalog to a file.
+//
 bool ExportLibraryToFile(HWND hDlg)
 {
     OPENFILENAME ofn;
@@ -331,7 +384,11 @@ bool ExportLibraryToFile(HWND hDlg)
     return true;
 }
 
-
+//
+//  FUNCTION: SortLibrary(int)
+//
+//  PURPOSE: Sorts the global library vector based on the selected mode.
+//
 void SortLibrary(int mode)
 {
     switch (mode)
@@ -390,12 +447,26 @@ void SortLibrary(int mode)
 
 }
 
+//
+//  FUNCTION: GetRealIndexFromListBox(HWND, int)
+//
+//  PURPOSE: Retrieves the actual vector index of a book from the ListBox.
+//
+//  COMMENTS:
+//      Because the ListBox might be sorted or filtered differently than the vector,
+//      we store the original vector index in ITEMDATA.
+//
 int GetRealIndexFromListBox(HWND hList, int selection)
 {
     if (selection == LB_ERR) return -1;
     return (int)SendMessage(hList, LB_GETITEMDATA, selection, 0);
 }
 
+//
+//  FUNCTION: RefreshBookList(HWND, const wstring&)
+//
+//  PURPOSE: Updates the ListBox content based on the library data and genre filter.
+//
 void RefreshBookList(HWND hDlg, const wstring& genreFilter) {
     HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
     SendMessage(hList, LB_RESETCONTENT, 0, 0);
@@ -425,6 +496,11 @@ void RefreshBookList(HWND hDlg, const wstring& genreFilter) {
     SetDlgItemText(hDlg, IDC_TOTALBOOKS, countText.c_str());
 }
 
+//
+//  FUNCTION: PopulateGenreCombo(HWND)
+//
+//  PURPOSE: Fills a combobox with the predefined list of genres.
+//
 void PopulateGenreCombo(HWND combo)
 {
     SendMessage(combo, CB_RESETCONTENT, 0, 0);
@@ -432,24 +508,45 @@ void PopulateGenreCombo(HWND combo)
         SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)g.c_str());
 }
 
-
+//
+//  FUNCTION: DrawBarChart(HDC, RECT, vector<pair<wstring, int>>, wstring)
+//
+//  PURPOSE: Draws a GDI bar chart based on provided data pairs.
+//
+//  COMMENTS:
+//      Handles creating fonts, brushes, and pens to draw axes, bars, and labels.
+//
 void DrawBarChart(HDC hdc, RECT rect, const vector<pair<wstring, int>>& data, const wstring& title)
 {
     if (data.empty()) return;
 
+    // Setup Graphics Objects
     HBRUSH blueBrush = CreateSolidBrush(RGB(70, 130, 180));
     HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, blueBrush);
     HPEN blackPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
     HPEN oldPen = (HPEN)SelectObject(hdc, blackPen);
 
-    SetTextAlign(hdc, TA_CENTER);
     SetBkMode(hdc, TRANSPARENT);
-    HFONT hFont = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
-    HFONT oldFont = (HFONT)SelectObject(hdc, hFont);
 
+    // Create Fonts
+    // Title Font
+    HFONT hTitleFont = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
+
+    // Number Font
+    HFONT hNumFont = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
+
+    // Axis Label Font
+    HFONT hLabelFont = CreateFont(12, 0, 900, 900, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
+
+    // Draw Title
+    HFONT oldFont = (HFONT)SelectObject(hdc, hTitleFont); // Save original system font
+    SetTextAlign(hdc, TA_CENTER | TA_TOP);
     TextOut(hdc, rect.left + (rect.right - rect.left) / 2, rect.top + 10, title.c_str(), (int)title.length());
 
+    // Calculate Chart Dimensions
     int chartTop = rect.top + 50;
     int chartBottom = rect.bottom - 80;
     int chartLeft = rect.left + 60;
@@ -457,15 +554,16 @@ void DrawBarChart(HDC hdc, RECT rect, const vector<pair<wstring, int>>& data, co
     int chartHeight = chartBottom - chartTop;
     int chartWidth = chartRight - chartLeft;
 
-    int maxValue = 0;
-    for (const auto& item : data)
-        if (item.second > maxValue) maxValue = item.second;
-
-    if (maxValue == 0) maxValue = 1;
-
+    // Draw Axes
     MoveToEx(hdc, chartLeft, chartTop, NULL);
     LineTo(hdc, chartLeft, chartBottom);
     LineTo(hdc, chartRight, chartBottom);
+
+    // Calculate Scale
+    int maxValue = 0;
+    for (const auto& item : data)
+        if (item.second > maxValue) maxValue = item.second;
+    if (maxValue == 0) maxValue = 1;
 
     int barCount = (int)data.size();
     int barSpacing = 10;
@@ -473,42 +571,49 @@ void DrawBarChart(HDC hdc, RECT rect, const vector<pair<wstring, int>>& data, co
     int barWidth = (chartWidth - totalSpacing) / barCount;
     if (barWidth < 5) barWidth = 5;
 
-    SelectObject(hdc, CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial"));
-
+    // Loop to draw Bars, Numbers, and Labels
     for (size_t i = 0; i < data.size(); i++)
     {
         int x = chartLeft + barSpacing + (int)i * (barWidth + barSpacing);
         int barHeight = (int)((double)data[i].second / maxValue * chartHeight);
         int y = chartBottom - barHeight;
 
+        // Draw the Bar Rectangle
         Rectangle(hdc, x, y, x + barWidth, chartBottom);
 
+		// Draw number above bar
+        SelectObject(hdc, hNumFont);        
+        SetTextAlign(hdc, TA_CENTER | TA_TOP);
+
         wstring valueStr = to_wstring(data[i].second);
-        SetTextAlign(hdc, TA_CENTER);
         TextOut(hdc, x + barWidth / 2, y - 20, valueStr.c_str(), (int)valueStr.length());
 
-        SetTextAlign(hdc, TA_LEFT);
-        int labelX = x + barWidth / 2;
-        int labelY = chartBottom + 10;
-
-        HFONT labelFont = CreateFont(12, 0, 900, 900, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Arial");
-        SelectObject(hdc, labelFont);
-
-        TextOut(hdc, labelX, labelY, data[i].first.c_str(), (int)data[i].first.length());
-
-        DeleteObject(labelFont);
+		// Draw label below bar
+        SelectObject(hdc, hLabelFont);
+        SetTextAlign(hdc, TA_RIGHT | TA_BOTTOM);
+        TextOut(hdc, x + barWidth / 2 + 5, chartBottom + 5, data[i].first.c_str(), (int)data[i].first.length());
     }
 
+    // Cleanup
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
     SelectObject(hdc, oldFont);
+
     DeleteObject(blueBrush);
     DeleteObject(blackPen);
-    DeleteObject(hFont);
+    DeleteObject(hTitleFont);
+    DeleteObject(hNumFont);
+    DeleteObject(hLabelFont);
 }
 
+//
+//  FUNCTION: StatsDlg(HWND, UINT, WPARAM, LPARAM)
+//
+//  PURPOSE: Processes messages for the Statistics dialog box.
+//
+//  COMMENTS:
+//      Handles WM_PAINT to draw charts and WM_COMMAND to switch between views (Genre/Year).
+//
 INT_PTR CALLBACK StatsDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static bool showByGenre = true;
@@ -600,6 +705,14 @@ INT_PTR CALLBACK StatsDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     return (INT_PTR)FALSE;
 }
 
+//
+//  FUNCTION: AddBookDlg(HWND, UINT, WPARAM, LPARAM)
+//
+//  PURPOSE: Processes messages for the "Add Book" dialog box.
+//
+//  COMMENTS:
+//      Validates input and checks for duplicate ISBNs before adding to library.
+//
 INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -654,7 +767,14 @@ INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPara
     return (INT_PTR)FALSE;
 }
 
-
+//
+//  FUNCTION: EditBookDlg(HWND, UINT, WPARAM, LPARAM)
+//
+//  PURPOSE: Processes messages for the "Edit Book" dialog box.
+//
+//  COMMENTS:
+//      Allows user to select a book from a dropdown, then updates fields for editing.
+//
 INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static int selectedIndex = -1;
@@ -737,7 +857,14 @@ INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
     return (INT_PTR)FALSE;
 }
 
-
+//
+//  FUNCTION: LibraryCatalog(HWND, UINT, WPARAM, LPARAM)
+//
+//  PURPOSE: Processes messages for the main Library Catalog dialog.
+//
+//  COMMENTS:
+//      Handles CRUD buttons (Add, Edit, Delete), Sorting, Filtering, and Import/Export.
+//
 INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
@@ -899,7 +1026,6 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 //  WM_DESTROY  - post a quit message and return
 //
 //
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
