@@ -777,57 +777,52 @@ INT_PTR CALLBACK AddBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPara
 //
 INT_PTR CALLBACK EditBookDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    static int selectedIndex = -1;
+    // We use a static variable to remember which book we are editing
+    // between the INIT message and the OK command.
+    static int editingIndex = -1;
 
     switch (message)
     {
     case WM_INITDIALOG:
     {
-        HWND hComboTitle = GetDlgItem(hDlg, IDC_COMBO_TITLE);
-        for (size_t i = 0; i < library.size(); i++)
+        editingIndex = (int)lParam;
+
+        if (editingIndex < 0 || editingIndex >= (int)library.size())
         {
-            int idx = (int)SendMessage(hComboTitle, CB_ADDSTRING, 0, (LPARAM)library[i].title.c_str());
-            SendMessage(hComboTitle, CB_SETITEMDATA, idx, (LPARAM)i);
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)FALSE;
         }
 
+        const Book& b = library[editingIndex];
+
+        SetDlgItemText(hDlg, IDC_EDIT_TITLE, b.title.c_str());
+        SetDlgItemText(hDlg, IDC_EDIT_AUTHOR, b.author.c_str());
+        SetDlgItemInt(hDlg, IDC_EDIT_YEAR, b.year, FALSE);
+        SetDlgItemText(hDlg, IDC_EDIT_ISBN, b.isbn.c_str());
+
         PopulateGenreCombo(GetDlgItem(hDlg, IDC_GENRE));
-        selectedIndex = -1;
+
+        auto it = find(GENRES.begin(), GENRES.end(), b.genre);
+        if (it != GENRES.end())
+        {
+            int genreIdx = (int)distance(GENRES.begin(), it);
+            SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_SETCURSEL, genreIdx, 0);
+        }
+        else
+        {
+            SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_SETCURSEL, 0, 0);
+        }
+
         return (INT_PTR)TRUE;
     }
 
     case WM_COMMAND:
         switch (LOWORD(wParam))
         {
-        case IDC_COMBO_TITLE:
-            if (HIWORD(wParam) == CBN_SELCHANGE)
-            {
-                HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_TITLE);
-                int comboIndex = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
-                selectedIndex = (int)SendMessage(hCombo, CB_GETITEMDATA, comboIndex, 0);
-
-                if (selectedIndex >= 0 && selectedIndex < (int)library.size())
-                {
-                    const Book& b = library[selectedIndex];
-
-                    SetDlgItemText(hDlg, IDC_EDIT_TITLE, b.title.c_str());
-                    SetDlgItemText(hDlg, IDC_EDIT_AUTHOR, b.author.c_str());
-                    SetDlgItemInt(hDlg, IDC_EDIT_YEAR, b.year, FALSE);
-                    SetDlgItemText(hDlg, IDC_EDIT_ISBN, b.isbn.c_str());
-
-                    auto it = find(GENRES.begin(), GENRES.end(), b.genre);
-                    if (it != GENRES.end())
-                    {
-                        int genreIdx = (int)distance(GENRES.begin(), it);
-                        SendMessage(GetDlgItem(hDlg, IDC_GENRE), CB_SETCURSEL, genreIdx, 0);
-                    }
-                }
-            }
-            return (INT_PTR)TRUE;
-
         case IDOK:
-            if (selectedIndex >= 0 && selectedIndex < (int)library.size())
+            if (editingIndex >= 0 && editingIndex < (int)library.size())
             {
-                Book& b = library[selectedIndex];
+                Book& b = library[editingIndex];
                 wchar_t buffer[256];
 
                 GetDlgItemText(hDlg, IDC_EDIT_TITLE, buffer, 256);
@@ -906,11 +901,24 @@ INT_PTR CALLBACK LibraryCatalog(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             return (INT_PTR)TRUE;
 
         case IDC_BTN_EDIT:
-            if (DialogBox(hInst, MAKEINTRESOURCE(IDD_EDIT_DIALOG), hDlg, EditBookDlg) == IDOK)
+        {  
+            HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
+            int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+            int realIndex = GetRealIndexFromListBox(hList, sel);
+
+            if (realIndex < 0)
+            {
+                MessageBox(hDlg, L"Please select a book to edit.", L"No Selection", MB_ICONWARNING);
+                return (INT_PTR)TRUE;
+            }
+
+            if (DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_EDIT_DIALOG), hDlg, EditBookDlg, (LPARAM)realIndex) == IDOK)
             {
                 RefreshBookList(hDlg, currentGenreFilter);
             }
             return (INT_PTR)TRUE;
+        }
+
         case IDC_BTN_DELETE:
         {
             HWND hList = GetDlgItem(hDlg, IDC_BOOKLIST);
